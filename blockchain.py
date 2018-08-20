@@ -1,4 +1,6 @@
 import functools
+import hashlib
+import json
 MINING_REWARD = 10
 genesis_block = {
     'previous_hash': '',
@@ -12,23 +14,50 @@ participants = {'babak'}  # this is a set
 
 
 def hashed_block(block):
-    return '-'.join([str(block[key]) for key in block])
+    return hashlib.sha256(json.dumps(block).encode()).hexdigest()
+    # return '-'.join([str(block[key]) for key in block])
 
 
+# def get_balance(participant):
+#     tx_sender = [[tx['amount'] for tx in block['transaction']
+#                   if tx['sender'] == participant] for block in blockchain]  # this is nested list comperhension
+#     open_tx_sender = [tx['amount']
+#                       for tx in open_transaction if tx['sender'] == participant]
+
+#     tx_sender.append(open_tx_sender)
+#     amount_send = functools.reduce(
+#         lambda tx_sum, tx_amount: tx_sum+sum(tx_amount) if len(tx_amount) > 0 else tx_sum+0, tx_sender, 0)
+#     tx_recipient = [[tx['amount'] for tx in block['transaction']
+#                      if tx['recipient'] == participant] for block in blockchain]  # this is nested list comperhension
+#     amount_recieved = functools.reduce(
+#         lambda tx_sum, tx_amount: tx_sum+(tx_amount) if len(tx_amount) > 0 else tx_sum+0, tx_recipient, 0)
+#     return amount_recieved - amount_send
 def get_balance(participant):
+    """Calculate and return the balance for a participant.
+
+    Arguments:
+        :participant: The person for whom to calculate the balance.
+    """
+    # Fetch a list of all sent coin amounts for the given person (empty lists are returned if the person was NOT the sender)
+    # This fetches sent amounts of transactions that were already included in blocks of the blockchain
     tx_sender = [[tx['amount'] for tx in block['transaction']
-                  if tx['sender'] == participant] for block in blockchain]  # this is nested list comperhension
+                  if tx['sender'] == participant] for block in blockchain]
+    # Fetch a list of all sent coin amounts for the given person (empty lists are returned if the person was NOT the sender)
+    # This fetches sent amounts of open transactions (to avoid double spending)
     open_tx_sender = [tx['amount']
                       for tx in open_transaction if tx['sender'] == participant]
-
     tx_sender.append(open_tx_sender)
-    amount_send = functools.reduce(
-        lambda tx_sum, tx_amount: tx_sum+sum(tx_amount) if len(tx_amount) > 0 else tx_sum+0, tx_sender, 0)
+    print(tx_sender)
+    amount_sent = functools.reduce(
+        lambda tx_sum, tx_amt: tx_sum + sum(tx_amt) if len(tx_amt) > 0 else tx_sum + 0, tx_sender, 0)
+    # This fetches received coin amounts of transactions that were already included in blocks of the blockchain
+    # We ignore open transactions here because you shouldn't be able to spend coins before the transaction was confirmed + included in a block
     tx_recipient = [[tx['amount'] for tx in block['transaction']
-                     if tx['recipient'] == participant] for block in blockchain]  # this is nested list comperhension
-    amount_recieved = functools.reduce(
-        lambda tx_sum, tx_amount: tx_sum+(tx_amount) if len(tx_amount) > 0 else tx_sum+0, tx_recipient, 0)
-    return amount_recieved - amount_send
+                     if tx['recipient'] == participant] for block in blockchain]
+    amount_received = functools.reduce(lambda tx_sum, tx_amt: tx_sum + sum(
+        tx_amt) if len(tx_amt) > 0 else tx_sum + 0, tx_recipient, 0)
+    # Return the total balance
+    return amount_received - amount_sent
 
 
 def get_last_blockchain_value():
@@ -64,6 +93,7 @@ def add_transaction(recipient, sender=owner, amount=1.0):
 def mine_block():
     last_block = blockchain[-1]
     hashed = hashed_block(last_block)
+    print("hashed_block is {}".format(hashed))
     reward_transaction = {
         'sender': 'MINING',
         'recipient': owner,
