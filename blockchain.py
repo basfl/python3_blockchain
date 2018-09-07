@@ -1,11 +1,14 @@
 import functools
-import hashlib
-import json
+import hashlib as hl
+from collections import OrderedDict
+
+from hash_util import hash_string_256, hashed_block
 MINING_REWARD = 10
 genesis_block = {
     'previous_hash': '',
     'index': 0,
-    'transaction': []
+    'transaction': [],
+    'proof': 100
 }
 blockchain = [genesis_block]
 open_transaction = []
@@ -13,25 +16,21 @@ owner = 'babak'
 participants = {'babak'}  # this is a set
 
 
-def hashed_block(block):
-    return hashlib.sha256(json.dumps(block).encode()).hexdigest()
-    # return '-'.join([str(block[key]) for key in block])
+def valid_proof(transactions, last_hash, proof):
+    guess = (str(transactions)+str(last_hash)+str(proof)).encode()
+    guess_hash = hash_string_256(guess)
+    print(guess_hash)
+    return guess_hash[0:2] == '00'
 
 
-# def get_balance(participant):
-#     tx_sender = [[tx['amount'] for tx in block['transaction']
-#                   if tx['sender'] == participant] for block in blockchain]  # this is nested list comperhension
-#     open_tx_sender = [tx['amount']
-#                       for tx in open_transaction if tx['sender'] == participant]
+def proof_of_work():
+    last_block = blockchain[-1]
+    last_hash = hashed_block(last_block)
+    proof = 0
+    while not valid_proof(open_transaction, last_hash, proof):
+        proof += 1
+    return proof
 
-#     tx_sender.append(open_tx_sender)
-#     amount_send = functools.reduce(
-#         lambda tx_sum, tx_amount: tx_sum+sum(tx_amount) if len(tx_amount) > 0 else tx_sum+0, tx_sender, 0)
-#     tx_recipient = [[tx['amount'] for tx in block['transaction']
-#                      if tx['recipient'] == participant] for block in blockchain]  # this is nested list comperhension
-#     amount_recieved = functools.reduce(
-#         lambda tx_sum, tx_amount: tx_sum+(tx_amount) if len(tx_amount) > 0 else tx_sum+0, tx_recipient, 0)
-#     return amount_recieved - amount_send
 def get_balance(participant):
     """Calculate and return the balance for a participant.
 
@@ -81,7 +80,8 @@ def add_transaction(recipient, sender=owner, amount=1.0):
         :recipient: the recipient of the coin
         :amount: the amount of coins send with transaction
     """
-    transaction = {'sender': sender, 'recipient': recipient, 'amount': amount}
+    transaction = OrderedDict(
+        [('sender', sender), ('recipient', recipient), ('amount', amount)])
     if verify_transaction(transaction):
         open_transaction.append(transaction)
         participants.add(sender)
@@ -93,19 +93,17 @@ def add_transaction(recipient, sender=owner, amount=1.0):
 def mine_block():
     last_block = blockchain[-1]
     hashed = hashed_block(last_block)
-    print("hashed_block is {}".format(hashed))
-    reward_transaction = {
-        'sender': 'MINING',
-        'recipient': owner,
-        'amount': MINING_REWARD
-    }
+    proof = proof_of_work()
+    reward_transaction = OrderedDict(
+        [('sender', 'MINING'), ('recipient', owner), ('amount', MINING_REWARD)])
     copied_transactions = open_transaction[:]
     copied_transactions.append(reward_transaction)
     open_transaction.append(reward_transaction)
     block = {
         'previous_hash': hashed,
         'index': len(blockchain),
-        'transaction': copied_transactions
+        'transaction': copied_transactions,
+        'proof': proof
     }
     blockchain.append(block)
     return True
@@ -137,17 +135,13 @@ def verify_chain():
             continue
         if block["previous_hash"] != hashed_block(blockchain[index-1]):
             return False
+        if not valid_proof(block['transaction'][:-1], block['previous_hash'], block['proof']):
+            print('proof of work is invalid')
+            return False
     return True
 
 
 def verify_transactions():
-    # is_valid = True
-    # for tx in open_transaction:
-    #     if verify_transaction(tx):
-    #         is_valid = True
-    #     else:
-    #         is_valid = False
-    # return is_valid
     all([verify_transaction(tx) for tx in open_transaction])
 
 
