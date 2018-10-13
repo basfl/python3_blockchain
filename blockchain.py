@@ -99,7 +99,7 @@ class Blockchain():
         last_hash = hash_block(last_block)
         proof = 0
         # Try different PoW numbers and return the first valid one
-        while not Verification.valid_proof(self.__open_transaction, last_hash, proof):
+        while not Verification.valid_proof(self.__open_transactions, last_hash, proof):
             proof += 1
         return proof
 
