@@ -1,50 +1,56 @@
 from functools import reduce
 import hashlib as hl
-from collections import OrderedDict
+
 import json
 import pickle
 
 # Import two functions from our hash_util.py file. Omit the ".py" in the import
 from utility.hash_util import hash_block
+from utility.verification import Verification
 from block import Block
 from transaction import Transaction
-from utility.verification import Verification
 
 # The reward we give to miners (for creating a new block)
 MINING_REWARD = 10
 
+print(__name__)
 
-class Blockchain():
+class Blockchain:
+    """The Blockchain class manages the chain of blocks as well as open transactions and the node on which it's running.
+    
+    Attributes:
+        :chain: The list of blocks
+        :open_transactions (private): The list of open transactions
+        :hosting_node: The connected node (which runs the blockchain).
+    """
     def __init__(self, hosting_node_id):
+        """The constructor of the Blockchain class."""
+        # Our starting block for the blockchain
         genesis_block = Block(0, '', [], 100, 0)
+        # Initializing our (empty) blockchain list
         self.chain = [genesis_block]
+        # Unhandled transactions
         self.__open_transactions = []
         self.load_data()
         self.hosting_node = hosting_node_id
 
+    # This turns the chain attribute into a property with a getter (the method below) and a setter (@chain.setter)
     @property
     def chain(self):
         return self.__chain[:]
 
-    @chain.setter
-    def chain(self, v):
-        self.__chain = v
+    # The setter for the chain property
+    @chain.setter 
+    def chain(self, val):
+        self.__chain = val
+
 
     def get_open_transactions(self):
+        """Returns a copy of the open transactions list."""
         return self.__open_transactions[:]
-# Initializing our (empty) blockchain list
-#blockchain = []
-# Unhandled transactions
-#open_transactions = []
-# We are the owner of this blockchain node, hence this is our identifier (e.g. for sending coins)
-#owner = 'Babak'
-# Registered participants: Ourself + other people sending/ receiving coins
-#participants = {'Babak'}
 
     def load_data(self):
         """Initialize blockchain + open transactions data from a file."""
-        global blockchain
-        global open_transactions
         try:
             with open('blockchain.txt', mode='r') as f:
                 # file_content = pickle.loads(f.read())
@@ -68,10 +74,9 @@ class Blockchain():
                     updated_transaction = Transaction(
                         tx['sender'], tx['recipient'], tx['amount'])
                     updated_transactions.append(updated_transaction)
-                self.__open_transaction = updated_transactions
+                self.__open_transactions = updated_transactions
         except (IOError, IndexError):
-            print("Handled exception...")
-
+            pass
         finally:
             print('Cleanup!')
 
@@ -83,7 +88,7 @@ class Blockchain():
                     tx.__dict__ for tx in block_el.transactions], block_el.proof, block_el.timestamp) for block_el in self.__chain]]
                 f.write(json.dumps(saveable_chain))
                 f.write('\n')
-                saveable_tx = [tx.__dict__ for tx in self.__open_transaction]
+                saveable_tx = [tx.__dict__ for tx in self.__open_transactions]
                 f.write(json.dumps(saveable_tx))
                 # save_data = {
                 #     'chain': blockchain,
@@ -105,9 +110,6 @@ class Blockchain():
 
     def get_balance(self):
         """Calculate and return the balance for a participant.
-
-        Arguments:
-            :participant: The person for whom to calculate the balance.
         """
         participant = self.hosting_node
         # Fetch a list of all sent coin amounts for the given person (empty lists are returned if the person was NOT the sender)
@@ -117,7 +119,7 @@ class Blockchain():
         # Fetch a list of all sent coin amounts for the given person (empty lists are returned if the person was NOT the sender)
         # This fetches sent amounts of open transactions (to avoid double spending)
         open_tx_sender = [tx.amount
-                          for tx in self.__open_transaction if tx.sender == participant]
+                          for tx in self.__open_transactions if tx.sender == participant]
         tx_sender.append(open_tx_sender)
         print(tx_sender)
         amount_sent = reduce(lambda tx_sum, tx_amt: tx_sum + sum(tx_amt)
@@ -137,11 +139,9 @@ class Blockchain():
             return None
         return self.__chain[-1]
 
-
-# This function accepts two arguments.
-# One required one (transaction_amount) and one optional one (last_transaction)
-# The optional one is optional because it has a default value => [1]
-
+    # This function accepts two arguments.
+    # One required one (transaction_amount) and one optional one (last_transaction)
+    # The optional one is optional because it has a default value => [1]
 
     def add_transaction(self, recipient, sender, amount=1.0):
         """ Append a new value as well as the last blockchain value to the blockchain.
@@ -156,11 +156,11 @@ class Blockchain():
         #     'recipient': recipient,
         #     'amount': amount
         # }
+        if self.hosting_node == None:
+            return False
         transaction = Transaction(sender, recipient, amount)
         if Verification.verify_transaction(transaction, self.get_balance):
-            open_transactions.append(transaction)
-            # participants.add(sender)
-            # participants.add(recipient)
+            self.__open_transactions.append(transaction)
             self.save_data()
             return True
         return False
@@ -168,6 +168,8 @@ class Blockchain():
     def mine_block(self):
         """Create a new block and add open transactions to it."""
         # Fetch the currently last block of the blockchain
+        if self.hosting_node == None:
+            return False
         last_block = self.__chain[-1]
         # Hash the last block (=> to be able to compare it to the stored hash value)
         hashed_block = hash_block(last_block)
@@ -178,18 +180,14 @@ class Blockchain():
         #     'recipient': owner,
         #     'amount': MINING_REWARD
         # }
-        reward_transaction = Transaction(
-            'MINING', self.hosting_node, MINING_REWARD)
+        reward_transaction = Transaction('MINING', self.hosting_node, MINING_REWARD)
         # Copy transaction instead of manipulating the original open_transactions list
         # This ensures that if for some reason the mining should fail, we don't have the reward transaction stored in the open transactions
-        copied_transactions = self.__open_transaction[:]
+        copied_transactions = self.__open_transactions[:]
         copied_transactions.append(reward_transaction)
         block = Block(len(self.__chain), hashed_block,
                       copied_transactions, proof)
         self.__chain.append(block)
-        self.__open_transaction = []
+        self.__open_transactions = []
         self.save_data()
         return True
-
-
-#waiting_for_input = True
